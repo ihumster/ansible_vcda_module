@@ -13,6 +13,9 @@ VCDA_LOGIN_TYPES = ['appliance', 'sso', 'vcd']
 
 
 def vcda_argument_spec():
+    """Set default module argument spec, needed for login to VCDA appliance
+        and get access token, used in next API calls.
+    """
     return dict(
         hostname=dict(type='str', required=True,
                       fallback=(env_fallback, ['VCDA_HOST'])),
@@ -72,28 +75,13 @@ class VCDAAnsibleModule(AnsibleModule):
                                    headers=headers, data=json.dumps(session_body))
         status_code = info['status']
         if status_code == 200:
-            self.__token = response.headers.get('X-VCAV-Auth')
-            self.__hAccept = response.headers.get('Content-Type')
-            self.__hostname = hostname
+            self.token = response.headers.get('X-VCAV-Auth')
+            self.hAccept = response.headers.get('Content-Type')
+            self.hostname = hostname
+            self.password = password
         elif status_code == 401:
             self.fail_json(
                 msg='Login failed for user {}'.format(username))
         else:
             self.fail_json(
                 msg='{}'.format(info))
-
-    def get_info(self):
-        url = f"https://{self.__hostname}/diagnostics/about"
-        headers = {
-            "Accept": self.__hAccept,
-            "Content-Type": "application/json",
-            "X-VCAV-Auth": self.__token
-        }
-        response, info = fetch_url(module=self, url=url, method="GET",
-                                   headers=headers)
-        status_code = info['status']
-        if status_code == 200:
-            r = json.loads(response.read())
-            self.exit_json(changed=False, vcda_info=r)
-        else:
-            self.fail_json(msg="{}".format(info['body']))
