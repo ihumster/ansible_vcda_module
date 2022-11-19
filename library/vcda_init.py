@@ -23,33 +23,25 @@ class VCDAInit(VCDAAnsibleModule):
     def vcda_init(self) -> dict():
         result = dict()
         result['changed'] = False
+        result['failed'] = False
         result['warnings'] = []
         # Check password expirations and changing password if his expiried
-        pass_expiried = self.get_appliance_password_expiried()
-        if type(pass_expiried) is bool and pass_expiried == True:
+        pass_expiried = self.get_appliance_password_expiried(result=result)
+        if pass_expiried is None:  # get_appliance_password_expiried request return 400+ status code, need exit
+            return result
+        elif pass_expiried:  # get_appliance_password_expiried return True - pass need change
             new_pass = self.params.get('new_password')
             change_pass = self.change_manager_appliance_password(
-                new_password=new_pass)
-            if type(change_pass) is bool and change_pass == True:
-                result['changed'] = True
-                result['warnings'].append(
-                    "VCDA Appliance password is changed. For new operations use new password.")
-        elif type(pass_expiried) is bool and pass_expiried == False:
-            result['changed'] = False
-        else:
-            result['warnings'].append(pass_expiried)
-            result["failed"] = True
+                new_password=new_pass, result=result)
+            if not change_pass:  # change_manager_appliance_password request return 400+ status code, need exit
+                return result
         # Push license
         license_key = self.params.get('license_key')
-        license_push = self.push_license(license_key=license_key)
-        if type(license_push) is bool and license_push == True:
-            result['changed'] = True
-        else:
-            result['changed'] = result["changed"] or False
-            result["warnings"].append(license_push)
+        self.push_license(license_key=license_key, result=result)
+
         return result
 
-    def get_appliance_password_expiried(self):
+    def get_appliance_password_expiried(self, result: dict):
         url = f"https://{self.hostname}/appliance/root-password-expired"
         headers = {
             "Accept": self.hAccept,
@@ -67,9 +59,11 @@ class VCDAInit(VCDAAnsibleModule):
             else:
                 return False
         else:
-            return "{}".format(info)
+            b = json.loads(info['body'].decode())
+            result['msg'].append(b['msg'])
+            result['failed'] = True
 
-    def change_manager_appliance_password(self, new_password: str):
+    def change_manager_appliance_password(self, new_password: str, result: dict):
         url = f"https://{self.hostname}/config/root-password"
         headers = {
             "Accept": self.hAccept,
@@ -85,29 +79,43 @@ class VCDAInit(VCDAAnsibleModule):
 
         status_code = info['status']
         if status_code == 204:
+            result['changed'] = True
+            result['warnings'].append(
+                "VCDA Appliance password is changed. For new operations use new password.")
             return True
-        else:
-            return "{}".format(info)
+        elif status_code >= 400:
+            b = json.loads(info['body'].decode())
+            result['msg'].append(b['msg'])
+            result['failed'] = True
+            return False
 
-    def push_license(self, license_key: str):
+    def push_license(self, license_key: str, result: dict):
         url = f"https://{self.hostname}/license"
         headers = {
             "Accept": self.hAccept,
             "Content-Type": "application/json",
             "X-VCAV-Auth": self.token
         }
+
         body = {
             "key": license_key
         }
 
-        response, info = fetch_url(
-            module=self, url=url, method="POST", headers=headers, data=json.dumps(body))
-
+        response, info = fetch_url(module=self, url=url, method="GET")
         status_code = info['status']
         if status_code == 200:
-            return True
-        else:
-            return "{}".format(info)
+            r = json.loads(response.read())
+            if r['isLicensed']:
+                return
+        response, info = fetch_url(
+            module=self, url=url, method="POST", headers=headers, data=json.dumps(body))
+        status_code = info['status']
+        if status_code == 200:
+            result['changed'] = True
+        elif status_code >= 400:
+            b = json.loads(info['body'].decode())
+            result['msg'].append(b['msg'])
+            result['failed'] = True
 
 
 def main():
