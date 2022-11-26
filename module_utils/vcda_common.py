@@ -6,6 +6,7 @@ import json
 from ansible.module_utils.basic import AnsibleModule, env_fallback
 from ansible.module_utils.urls import fetch_url, ConnectionError, SSLValidationError
 from requests.packages import urllib3
+from typing import Literal
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -32,6 +33,9 @@ def vcda_argument_spec():
 
 
 class VCDAAnsibleModule(AnsibleModule):
+    HEADERS_TYPE = Literal['json', 'vendor']
+    API_METHODS = Literal['GET', 'POST', 'PUT', 'DELETE']
+
     def __init__(self, *args, **kwargs):
         argument_spec = vcda_argument_spec()
         argument_spec.update(kwargs.get('argument_spec', dict()))
@@ -40,12 +44,22 @@ class VCDAAnsibleModule(AnsibleModule):
         super(VCDAAnsibleModule, self).__init__(*args, **kwargs)
         self.login()
 
+        self.headers_vendor = {
+            "Accept": self.hAccept,
+            "Content-Type": "application/json",
+            "X-VCAV-Auth": self.token
+        }
+        self.headers_json = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "X-VCAV-Auth": self.token
+        }
+
     def login(self):
         hostname = self.params.get('hostname')
         username = self.params.get('username')
         password = self.params.get('password')
         login_type = self.params.get('login_type')
-        validate_certs = self.params.get('validate_certs')
 
         url = f"https://{hostname}/sessions"
         if login_type == 'appliance':
@@ -85,3 +99,21 @@ class VCDAAnsibleModule(AnsibleModule):
         else:
             self.fail_json(
                 msg='{}'.format(info))
+
+    def request_vcda_api(self, api_url: str, api_method: API_METHODS, headers_type: HEADERS_TYPE, headers_append: dict = {}, body: dict = {}):
+        url = f"https://{self.hostname}{api_url}"
+        match api_method:
+            case 'GET':
+                return fetch_url(module=self, method=api_method, url=url, headers=self.headers_json if headers_type == 'json' else self.headers_vendor)
+            case 'POST':
+                if headers_append:
+                    headers = self.headers_json.copy(
+                    ) if headers_type == 'json' else self.headers_vendor.copy()
+                    headers.update(headers_append)
+                else:
+                    headers = self.headers_json if headers_type == 'json' else self.headers_vendor
+                return fetch_url(module=self, method=api_method, url=url, headers=headers, data=json.dumps(body))
+            case 'PUT':
+                pass
+            case 'DELETE':
+                pass
