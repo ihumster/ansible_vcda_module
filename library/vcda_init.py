@@ -4,7 +4,6 @@
 from ansible.module_utils.vcda_common import VCDAAnsibleModule
 from typing import Literal
 import json
-import epdb
 
 
 def vcda_argument_spec():
@@ -51,6 +50,22 @@ class VCDAInit(VCDAAnsibleModule):
         result['changed'] = False
         result['failed'] = False
         result['warnings'] = []
+        # Get current config
+        resp, info = self.request_vcda_api(
+            api_url='/config',
+            api_method='GET',
+            headers_type='vendor')
+        if info['status'] == 200:
+            r = json.loads(resp.read())
+            if not all([r['lsUrl'] is None, r['lsThumbprint'] is None, r['localSite'] is None]):
+                result['msg'] = "VCDA is initialized. For configure initialized VCDA use other 'vcda_' modules."
+                result['failed'] = True
+                return result
+        else:  # get error
+            result['msg'] = "Can't get /config VCDA."
+            result['failed'] = True
+            return result
+
         # get all params
         new_pass = self.params.get('new_password')
         license_key = self.params.get('license_key')
@@ -497,7 +512,6 @@ def main():
     module = VCDAInit(argument_spec=argument_spec, supports_check_mode=True)
     try:
         if module.check_mode:
-            result = dict()
             result['changed'] = False
             result['msg'] = "skipped, running in check mode"
             result['skipped'] = True
