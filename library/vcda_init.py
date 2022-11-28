@@ -33,6 +33,16 @@ class VCDAInit(VCDAAnsibleModule):
         super(VCDAInit, self).__init__(*args, **kwargs)
 
     def get_certificate(self, url: str):
+        '''
+        Get remote certificate through VCDA Appliance and return tuple with 3 constants
+            Parameter:
+                ``url`` - full url, with scheme and port
+            Returns:
+                If the request was able to return a certificate:
+                    ``tuple([True, 'certificate thumbprint':str, 'base64 encoded certificate':str])``
+                else:
+                    ``tuple([False, None, None])``
+        '''
         cert_url = f"/config/remote-certificate?url={url}"
         resp, info = self.request_vcda_api(
             api_url=cert_url,

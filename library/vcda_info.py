@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 from ansible.module_utils.vcda_common import VCDAAnsibleModule
-from ansible.module_utils.urls import fetch_url, ConnectionError, SSLValidationError
 import json
 import time
 
@@ -12,7 +11,7 @@ class VCDAInfo(VCDAAnsibleModule):
         super(VCDAInfo, self).__init__(*args, **kwargs)
 
     def get_info(self):
-        """Get '/diagnostics/health' API call and return VCDA About info in vcda_info var."""
+        '''Get '/diagnostics/health' API call and return VCDA About info in vcda_health var.'''
         result = dict()
         error = dict()
         result['changed'] = False
